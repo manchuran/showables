@@ -9,10 +9,10 @@ logistic regression and artificial neural networks.
 
 
 ## Step 1
-Put `.data` file in the same folder as `.rmd` file. Also put image file `contingency.jpg` in the same folder .
+Download folder `breast-cancer-data`.
 
 ## Step 2
-Open `.rmd` file in RStudio, and run chunks
+Open `.rmd` file in RStudio, and run chunks.
 If RStudio unavailable, open `.html` file to assess results of project.
 
 ## Contributors
