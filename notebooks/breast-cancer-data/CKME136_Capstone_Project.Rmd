@@ -1,0 +1,1252 @@
+---
+title: "Capstone - CKME136"
+author: "Ade Adeoye"
+date: "28/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+- [Introduction](#introduction)
+- [Data Preprocessing & cleaning](#data-preprocessing-cleaning)
+- [Exploratory Data Analysis](#exploratory-data-analysis)
+- [Missing Values](#missing-values)
+  - [Imputing using KNN](#imputing-using-knn)
+  - [Multiple Correspondence Analysis](#multiple-correspondence-analysis)
+- [Class Balancing](#class-balancing)
+- [Model Fitting](#model-fitting)
+  - [Decision Tree](#decision-tree)
+  - [Naive-Bayes](#naive-bayes)
+  - [Logistic Regression](#logistic-regression)
+  - [Artificial Neural Networks](#artificial-neural-networks)
+- [Feature Engineering](#feature-engineering)
+- [Results](#results)
+- [Conclusion and Recommendations](#conclusion)
+- [References](#references)
+
+
+## Introduction {#introduction}
+
+Breast cancer is one of the leading causes of cancer-related deaths in the world. Its incidence is however quite biased. According to the Centers for Disease Control and Prevention (CDC), most cases of breast cancer are found in women, with estimates putting the likelihood at about a hundred times more likely than in males. For cancer-related diseases, early detection is crucial. If discovered early, a patient is highly likely to survive the disease, even if there may be a few cases of recurrence. This has given rise to a suite of data mining and machine learning efforts attempting to gain an advantage against this ailment by predicting the chances of a patient developing the disease, or if diagnosed already, the chances of the cancer remaining benign or turning malignant.
+
+In this study, we examine a breast cancer data set obtained from the University Medical Centre, Institute of Oncology, Ljubljana, Yugoslavia; and, applying a range of machine learning techniques, we predict the chances of recurrence of breast cancer in 286 patients. The essential part of the data mining procedure conducted is classification, where we categorize the sample according to its original binary split using a range of classification methods, after initially carrying out exploratory data analysis. The methods used include decision tree, naïve-Bayes, logistic regression, and artificial neural networks. As a conclusive analysis, we conduct a comparison of the metrics of these classification models, examining how the different models performed on the sample data. Finally, we settle on the best means of carrying out the classification task for this data set. 
+
+
+## Data Preprocessing & cleaning {#data-preprocessing-cleaning}
+
+Unlike most data sets, this data set has all categorical attributes. This presents unique challenges, as it means we are unable to immediately use many of the widely numerical approaches in deriving insights. However, this does not detract from our overall objective of determining how the different attributes serve as indicators of possible recurrence of breast cancer in a patient.
+
+First, we read in the data set into R's workspace using `read_csv` from the `readr` package. This ensures that we read in the data as a tibble and not automatically convert the attributes into factors. The data has no header. As a result, header is set to FALSE (`header = FALSE`) and will be set manually. There is a handful of missing data in the data set originally represented as "?". These have been converted to NA.
+
+```{r}
+#Load readr package
+library(readr)
+
+#Read in data using read_csv
+bdata <- read_csv('./data/breast-cancer.data', col_names = FALSE, na = c("?", NA))
+
+#Check first 6 rows of data
+head(bdata)
+```
+
+
+The attribute names are obtained from the accompanying `names` file found in the same folder as the data on the UCI machine learning database. We have got the following attributes for this data: `class`, `age`, `menopause`, `tumorSize`, `invNodes`, `nodeCaps`, `degMalig`, `breast`, `breastQuad` and `irradiat`. The description for each are given in the word document accompanying this analysis. However, for completeness, we will elaborate a little about each of these attributes in the `rmd` document.
+
+```{r}
+#Rename columns in data set
+cnames <- c("class", "age", "menopause", "tumorSize", "invNodes", "nodeCaps", "degMalig", "breast", "breastQuad", "irradiat")
+
+#Pass columns into dataframe
+colnames(bdata) <- cnames
+
+#Display head
+head(bdata)
+```
+
+We examine the structure of the data set.
+
+```{r}
+str(bdata)
+```
+
+
+`class` is the target binary variable identifying whether a patient experienced breast cancer recurrence or not. It has been read into the workspace as a character attribute, but we will change it into a factor variable with two levels: `recurrence-events` and `non-recurrence-events`. 
+
+`age` identifies the patients' ages at the time of diagnosis. This is specified in bins of 9, which seem quite sufficient enough for our analysis. At the moment, it has been read into R as a character, though it is better converted into a factor variable with 6 levels.
+
+`menopause` indicates whether the patient is pre-, or post-menopausal at the time of diagnosis. It is a tenary variable with three unique values, and is expressed as a function of age when menopause sets in. `premeno` identifies patients who are pre-menopausal, while `ge40` and `lt40` identifies post-menopausal patients who are greater than and less than 40 years old, respectively.
+
+`tumorSize` describes the greatest diameter in mm of the removed or excised tumor. It exists in bins of 4 and works better in our subsequently analysis as a factor variable.
+
+`invNodes` is the number of auxillary lymph nodes with visible metastic breast cancer at the time of diagnosis. It ranges from 0 to 26 in bins of 2. This also works better as a factor variable. The higher the number of infected lymph nodes, the more the cancer has metastized away from it source.
+
+```{r}
+#Unique values of tumor size
+unique(bdata$tumorSize)
+
+#Unique values of invNodes
+unique(bdata$invNodes)
+```
+
+`nodeCaps` is a binary variable indicating whether the cancer metastasized into a lymph node or not. Our body's immune system contains a network of lymph vessels and lymph nodes which collects fluid, waste, viruses and bacteria that are in the body tissues, outside the bloodstream. When cancer cells develop in the body, they may break away and end up in the lymph nodes near the developed tumor in a process called metastasis. According to oncologists, this often increases the chance that the cancer might return. In our analysis, we may expect that this variable could contribute rather significantly to the chances of a relapse in the patients.
+
+The `degMalig` attribute identifies the histological grade (range 1-3) of the tumor. Tumors that are grade 1 predominantly consist of cells that, while neoplastic, retain many of their usual characteristics. Grade 2 tumors look a lot less like normal cells and show increasing growth, while grade 3 tumors predominately consist of cells that are highly abnormal.
+
+`breast` is another binary variable indicating on which of patient's breast the tumor occured. This could happen on the left or right breast.
+
+`breastQuad` is the location of the tumor within the breast area (upper left, upper right, central, lower left, or lower right)
+
+`irradiat` indicates whether the patient received radiation therapy or not. Radiation therapy is a treatment that uses high-particle waves, such as x-rays, gamma rays or electron beams to destroy or damage cancer cells. It works by keeping cancer cells from growing and dividing, causing them to die.
+
+We will now convert all of these variables to the appropriate factor formats in order to enable better analysis. The models are better suited at handling a factor format than a character format. 
+
+```{r}
+library(dplyr)
+library(tidyr)
+
+#Get column names
+cols <- names(bdata)
+
+#Convert all columns to factor format
+bdata[cols] <- lapply(bdata[cols], factor)
+
+#Examine new structure of data set
+str(bdata)
+
+#Examine first few records
+head(bdata)
+```
+
+
+Now, we examine a summary of the data set to observe missing or unusual values.
+
+```{r}
+summary(bdata)
+```
+
+There are some missing data under `nodeCaps` and `breastQuad`. We take a closer look at the data set and identify which of the rows contain these missing values. We could subset the data set in order to see these rows.
+
+```{r}
+bdata %>% subset(is.na(nodeCaps)  | is.na(breastQuad))
+```
+
+The missing records are all under `nodeCaps` and `breastQuad`. There are 8 missing items under `nodeCaps` and 1 missing item under `breastQuad`. Later we will attempt to imput these missing values.
+
+Additionally, the class distribution between recurrent and non-recurrent cases appear quite unbalanced. There are 201 no-recurrence-events and 85 recurrence-events. This means in the sampling conducted to obtain this data set, more women who were sampled did not have a relapse. Such imbalance could have a detrimental effect on our subsequent machine learning analysis; therefore, this means we need to take special precaution by adequately treating this imbalance. Some of what we could do include oversampling the recurrent-events cases or undersampling the no-recurrence-events cases. Oversampling may be more favourable, since the number of records with no-reccurence cases are already quite few.
+
+
+Using the `table` function, we examine the distribution of the different attributes relative to the class attribute.
+
+```{r}
+with(bdata, table(class, age))
+```
+
+This not only confirms the class imbalance earlier observed in the `class` attributes, it also shows that this imbalance extends to other attributes when viewed in relation to the `class` attribute. In raw numbers, this is not immediately visible. When examined in proportions, it becomes clearer that there are much more "no-recurrence-events" than there are "recurrence-events".
+
+```{r}
+#Examine class split along age in proportion
+with(bdata, 100 * prop.table(table(class, age))) %>% round(2)
+```
+
+This global proportion shows the size of each element against the whole group. The largest proportion is made up of people in the age group 50-59 who have no recurrent incidents. The lowest, on the other hand, is the element representing the age group 20-29 who have recurrent cases. Another observation is that all the elements are not equally distributed throughout the table. For patients between the ages of 40 to 49, there are more than 2 times the number with no recurrent cases than there are with recurrent cases. This is about the same for patients between the ages of 60 to 69, but even worse for patients between the ages of 50 to 59. For all other patients, age distribution relative to recurrence-events seems about even. However, we can't say much for distribution per group. Examining the table proportions row-wise may help with this detail. This will show what the size of each class is per age group.
+
+```{r}
+#Examine class split along age in proportion, row-wise
+with(bdata, 100 * prop.table(table(class, age), 2)) %>% round(2)
+```
+
+The higher proportion of patients gravitate towards the `no-reccurence-events` label. With the exception of the age group 30-39, every other age group appears to have more `no-recurrence-events` patient than they do patients who relapsed. 
+
+
+```{r}
+#Examine class split along nodeCaps
+with(bdata, 100 * prop.table(table(class, nodeCaps))) %>% round(2)
+```
+
+While there does not seem to be a lot of imbalance in the `class` attributes relative to those who experienced a metastatization into a lymph node, the split is heavily biased for those who did not. Again, this could be detrimental to model fitting and will need to be properly managed.
+
+```{r}
+#Examine class split along degMalig
+with(bdata, 100 * prop.table(table(class, degMalig))) %>% round(2)
+```
+
+For patients with grade 1 and 2 tumors, the split between those with "recurrence-events" and those without is heavily biased towards those without. The ratio is as high as 5 for patients with grade 1 tumor. For patients with grade 3 tumor, the split is about even. 
+
+
+There is a total of 9 cases with missing values under either `nodeCaps` or `breastQuad`. Prior to conducting our classification tasks using machine learning technique, we will examine how beneficial it is to either completely remove the missing values or fill them up using their nearest neighbours.
+
+Some of the attributes have been binned into groups and converted into factors. It may help to have these as doubles (or integers) in order to gain better insight into the relationships between some of these variables. We will create a new dataset where we can have the average of some of these attributes, and will also one-hot encode some of the categorical variables in a later analysis. We will use this data set to conduct another analysis in parallel with the main analysis. While doing this, we'll look to see if additional insights can be gained from using this alternative data set. 
+
+First, we create a new feature consisting of data which is numeric and call this `bdata_alt`.
+```{r}
+#Load required library
+library(stringr)
+
+#Create copy of existing data set
+bdata_alt <- bdata
+
+#Split age, tumorSize and invNodes attributes
+bdata_alt$mage <- bdata_alt$age %>%
+                    str_split("-") %>%
+                    lapply(as.numeric) %>% lapply(mean) %>%
+                    unlist
+
+bdata_alt$mtumorSize <- bdata_alt$tumorSize %>%
+                    str_split("-") %>%
+                    lapply(as.numeric) %>% lapply(mean) %>%
+                    unlist
+
+bdata_alt$minvNodes <- bdata_alt$invNodes %>%
+                    str_split("-") %>%
+                    lapply(as.numeric) %>% lapply(mean) %>%
+                    unlist
+
+bdata_alt <- bdata_alt %>% mutate(degMalig = as.numeric(as.character(degMalig)))
+
+#Extract the numeric attributes and other factors
+bdata_malt <- bdata_alt %>%
+  dplyr::select(-age, -tumorSize, -invNodes)
+
+#Show head
+head(bdata_malt)
+```
+
+```{r}
+str(bdata_malt)
+```
+
+Now, we have a new dataframe with some attributes which are numeric.These are `mage`, `mtumorSize` and `minvNodes`. These have been calculated as averaged values of the range data provided. The other attributes are all factors.
+
+
+## Exploratory Data Analysis {#exploratory-data-analysis}
+
+Before beginning with some exploratory data analysis, we will convert some of the variable which carry more meaning at increased values into ordinal. At the moment, these variables exist as factors, but better analysis can be derived from the data if they appear as ordinal instead, since at increasing values they represent worse cases. These are `tumorSize` and `invNodes`. A larger `tumorSize` in mm indicates a worse situation of the cancer case. Greater number of infected lymph nodes also show a worse case of metastization in the breast cancer patient. By ordering these factors, we will be able to see clearer in the visualizations that follow how they are associated with the age of the patients or with whether there was a case of recurrence.
+
+All of the current variable adjustment will be done on the second copy of the dataframe, `bdata_alt`.
+```{r}
+#Convert tumorSize into ordinal variable
+bdata_alt$tumorSize <- factor(bdata_alt$tumorSize, ordered = TRUE, levels = c("0-4", "5-9","10-14","15-19","20-24","25-29","30-34","35-39","40-44","45-49","50-54"))
+
+#Convert invNodes into ordinal variable
+bdata_alt$invNodes <- factor(bdata_alt$invNodes, ordered = TRUE, levels = c("0-2", "3-5","6-8","9-11","12-14","15-17","24-26"))
+
+# bdata_alt$degMalig <- 
+#Examine structure of new data
+str(bdata_alt)
+```
+
+Here, we are also able to establish that, while `invNodes` has 7 levels, it is "missing" two bins, 18-20 and 21-23, among cases in the data set. This could be because these bins simply do not exist, or may have been unintentionally left out while gathering the data. Research into the source of the data shows no indication of the latter, so we are forced to accept that these cases simply do not exist. We will also be making no allowance for them.
+
+The attribute most representative of each patient is their age. Examining a bar plot of `age` against `class` confirms the imbalance in the class distribution.
+
+```{r}
+library(ggthemes)
+library(ggplot2)
+
+table(bdata$age, bdata$class) %>% as.data.frame %>% ggplot(aes(x = Var1, y = Freq, fill = Var2)) + geom_bar(stat = "identity", position = "fill") + labs(fill = "class") + xlab("Age") + theme_tufte()
+
+table(bdata$age, bdata$class) %>% as.data.frame %>% ggplot(aes(x = Var1, y = Freq, fill = Var2)) + geom_bar(stat = "identity", position = "dodge") + labs(fill = "class") + xlab("Age") + theme_tufte()
+```
+
+
+We see, here, that recurrent events make up a smaller proportion of the cases in the available data. For ages between 20 and 29, there are no cases of recurrence. For those between 30 and 39, the recurrent cases are a little less than 50%. For other ages recurrent cases vary between 25 to 30%, with ages 70-79 registering the lowest value. Clearly, for all ages, non-recurrent cases dominate.
+
+The `tumorSize` attribute shows even more detail in the data distribution among `class` and `age`. `tumorSize` refers to the greatest diameter of the excised tumor. As shown the produced plot, for most of the ages and cases (of non-recurrence and recurrence), the tumorSize lies between 10 and 39. Since the average tumor size in most breast cancer cases is about 1in (or 25mm), this sample data seems quite representative.
+
+```{r}
+
+bdata_alt1 <- bdata_alt
+
+table(bdata_alt1$age, bdata_alt1$class, bdata_alt1$tumorSize, bdata_alt1$nodeCaps) %>% as.data.frame %>% ggplot(aes(x=Var1, y=Freq, fill=Var2)) + geom_bar(stat="identity") + facet_wrap(~Var3) + theme_tufte() + theme(legend.position = "bottom", text = element_text(size=8)) + labs(fill = "class") + xlab("Age")
+```
+
+Large tumor sizes often represent worse outcomes. Large tumor sizes suggest that more lymph nodes may be affected. This implies a correlation between `invNodes` and `tumorSize`. Though they may be correlated, they are however independent measures of outcome. Examining the relationship between these two attributes in our data could provide more information about this.
+
+```{r}
+table(bdata_alt$invNodes, bdata_alt$tumorSize) %>% as.data.frame %>% ggplot(aes(x=Var1, y = Freq)) + geom_bar(stat="identity") + facet_wrap(~Var2) + theme_tufte() + theme(text = element_text(size=8)) + xlab("Lymph Nodes Infected")
+```
+
+Faceting `invNodes` over `tumorSize` shows that the majority cases lie around values of `tumorSize` values of between 40 and 54. This is where the majority of patients lie.
+
+
+```{r}
+table(bdata_alt$invNodes, bdata_alt$tumorSize, color = bdata$class) %>% mosaicplot(cex=0.5, xlab = "Number of involved Lymph Nodes", ylab = "Tumour Size", las=1)
+```
+
+We derive a mosaic plot to show the relationship between `tumourSize` and `invNodes`. For the majority of cases, there are fewer (0-2) lymph nodes infected, even when the tumour size is large. For other cases of `tumorSize`, there are progressively fewer lymph nodes involved. Though there may be a correlation, this is not immediately visible. 
+
+Because we also now have a data set with numeric age variables, called `mage`, we could examine the histogram of the age distribution in the data set. This will help us derive insight, not only into the distribution of the age variables, but also into the nature of this distribution.
+
+```{r}
+#plot histogram of age distribution
+bdata_malt %>% ggplot(aes(x = mage)) + geom_histogram(bins=6, color="white")
+```
+
+We are able to tell that the distibution of age in the data set appears normal. There are fewer young and old people, with most patients middle-aged.
+
+
+## Missing Values {#missing-values}
+
+Missing values could be a problem for any data set. This is especially true when the data set is not large, or when missing values dominate. The `breast-cancer` data set has some missing values. These are present under `nodeCaps` and `breastQuad`. While there are only few missing values (9 in all), the size of the data set means it may be important to attempt imputing these values. Since the values missing at each record are not multiple, it may be desirable to impute these missing values. This means there is sufficient information available for these records to impute their missing values. In addition, some of the missing values are present in records with cases of recurrent-events, for which we have fewer rows to begin with. As a result, it will be of benefit to our overall analysis if we could impute these values.
+
+To do this, we will attempt a very simplistic approach at first by examining the mode of the attributes with missing values. This is the most preferable, quick method when working with categorical variables.
+
+```{r}
+summary(bdata[,c("nodeCaps", "breastQuad")])
+```
+
+
+The mode suggests that the NAs for `nodeCaps` could be the value "no", while the NA's for breastQuad could be "left_low" or "right_low. These are the most common values in each case and could fit well as replacements for the missing values. However, we will check again using K-nearest neighbour and multiple correspondence analysis.
+
+
+### Imputing using KNN {#imputing-using-knn}
+
+First, we impute missing values using kNN. One distance measure often used for categorical or mixed data is Gower distance. This measure is calculated with the following formula for two observations $p$ and $q$, over $i$ variables.
+
+$d_{p,q} = \frac{\sum_{i=1}^{n} w_{i}d_{i}^{2}}{\sum_{i=1}^{n} w_{i}}$
+
+where $w_{i}$ is a weight for the $i$th variable. $w_{i}$ takes the value 1 when both $p$ and $q$ are known; otherwise it takes zero. $d_{i}^2$ is the square of the distance between the $i$th value of the two observations ($p_{i}$ and $q_{i}$). $d_{i}$ is given as:
+
+$d_{i} = \frac{{|p_{i}-q_{i}|}}{R_{i}}$
+
+Before imputting, we take a record of the rows with missing values. We then use the five nearest neighbours of each missing value for the imputting
+
+```{r}
+with(bdata, which(is.na(nodeCaps) | is.na(breastQuad)))
+```
+
+The indices 146, 164, 165, 184, 185, 207, 234, 264 and 265 are those with missing values in either `nodeCaps` or `breastQuad`.
+
+```{r}
+#Load required library
+library(VIM)
+
+#Create new dataframe and impute missing values
+bdata_impute <- kNN(bdata, variable = c("nodeCaps", "breastQuad"), k = 5)
+
+summary(bdata_impute[,c("nodeCaps", "breastQuad")])
+```
+
+```{r}
+bdata_impute <- subset(bdata_impute, select = class:irradiat)
+```
+
+We see from the kNN imputting that it appears the missing values under `nodeCaps` have been assigned the value of "no", while those under `breastQuad` have been assigned the value of "left_low". This is similar to what we achieved earlier using the modal values, and may suggest that the values assigned may be sufficient. As a final check, we will use PCA to examine the distribution of each of these variables, while also gaining insight into how the different attributes from the data set is distributed. This way, we will not only be able to impute the missing values, but also examine the data distribution.
+
+### Multiple Correspondence Analysis {#multiple-correspondence-analysis}
+
+The attributes in this data set are all categorical. This means we cannot use R's base PCA package. Chavent et al (2017) discuss how to handle multivariate analysis of mixed data in their paper **Multivariate Analysis of Mixed Data: The R Package PCAmixdata**. The package "extends standard multivariate analysis methods to incorporate this type of data". It offers the function `PCAmix` which makes no distinction between ordinal and nominal variables and can be used for principal component analysis of both using MCA via Generalized Singular Value Decomposition. 
+
+
+```{r}
+#Load required library
+library(PCAmixdata)
+
+#Split data into quanti and quali. There are no quanti variables here though
+bdata_split <- splitmix(bdata)
+
+X1 <- bdata_split$X.quanti
+X2 <- bdata_split$X.quali
+
+#X2 has the class variable, which we can conveniently remove
+X2 <- X2[,-1]
+
+head(X2)
+```
+
+
+```{r}
+#Generate matrix
+bdata.pcamix <- PCAmix(X.quali = X2, rename.level = TRUE, graph = FALSE)
+
+head(bdata.pcamix$eig, 8)
+```
+
+We are able to see the first few principal components. The first 8 dimensions retreive about 39% of the total inertia. When we plot the first two principal components and take a look at the data distribution, with age for example, we see quite a fairly well distributed plot.
+
+```{r, fig.width=10, fig.height=7}
+#plot PCA mix
+plot(bdata.pcamix, choice="ind", coloring.ind=X2$age, posleg="bottomright", cex.leg=0.7)
+
+```
+
+Most of the older populations are located at the top of this age distribution, while the younger population are located somewhat at the bottom. We already see some favourable distribution which gives us additional insight into the data.
+
+```{r, fig.width=10, fig.height=7}
+#plot PCA mix
+plot(bdata.pcamix, choice="ind", coloring.ind=X2$nodeCaps, posleg="bottomright", cex.leg=0.7)
+
+#The missing points are obtainable using
+bdata.pcamix$ind$coord %>% head
+
+```
+
+These are the missing indices in the original data
+```{r}
+#indices of missing items in nodeCaps
+with(bdata, which(is.na(nodeCaps)))
+
+#indices of missing items in breastQuad
+with(bdata, which(is.na(breastQuad)))
+```
+
+We could visualize the missing items in the principal components plot. When we do this we are able to see the "cluster" to which the missing items belong. 
+
+```{r, fig.width=10, fig.height=7}
+#plot PCA mix
+plot(bdata.pcamix, choice="ind", coloring.ind=X2$nodeCaps, posleg="bottomright", cex.leg=0.7)
+
+#Extract items
+x <- data.frame(bdata.pcamix$ind$coord[with(bdata, which(is.na(nodeCaps))),])
+x$label <- with(bdata, which(is.na(nodeCaps)))
+
+#plot points
+for (i in 1:8){text(x$dim.1[i],x$dim.2[i], label=x$label[i], col="dodgerblue")}
+```
+
+
+When we examine the missing incides in the PCA plot, we see that most the the missing data for `nodeCaps` are grouped with the "no" cluster, while the missing value in `breastQuad` is grouped with "central". This is a little different from what we obtained using the mode and with kNN. At the moment, we will go with the results obtained from the mode and kNN, since these agree with each other.
+
+```{r, fig.width=10, fig.height=7}
+plot(bdata.pcamix, choice="ind", coloring.ind=X2$breastQuad, posleg="bottomright", cex.leg=0.7)
+```
+
+Now, we imput the missing values into the original data set.
+
+```{r}
+bdata[which(is.na(bdata$breastQuad)), c("breastQuad")] <- summary(bdata$breastQuad) %>% which.max %>% names
+```
+
+```{r}
+bdata[with(bdata, which(is.na(nodeCaps))), c("nodeCaps")] <- summary(bdata$nodeCaps) %>% which.max %>% names
+```
+
+Now, we examine if there are any NAs in the data set.
+```{r}
+any(is.na(bdata))
+```
+
+We have been able to successfully fill out the missing values: `any(is.na)` returns FALSE.
+
+
+## Class Balancing {#class-balancing}
+
+When there is a disparity in the frequencies of the observed classes in a data set, fitted models can be significantly impacted. If we take, for example, an extreme case of a binary classification task where, in a sample, there are 99 cases of a positive class and 1 case of a negative task. It is pretty easy to conclude that the model will be hard pressed making negative predictions. This is especially bad if the sample is not representative of the true population. Unfortunately, our data set is skewed such that there are many more cases of non-recurrent breast cancer. We have about 29% of recurrence-events and 70% non-recurrence-events. This means we have to find a technique which helps to even the class imbalance.
+
+```{r}
+table(bdata$class) %>% prop.table * 100
+```
+
+Achieving class balance is often done using oversampling, undersampling or synthethic data generation. Undersampling retrieves less records from the majority class and, this way, strikes a balance in the data set. This can either be done randomly or strategically. Oversampling, on the other hand, replicates observations in the minority class in the data set. Synthethic data generation adds new observations derived from the classes in the data set. This can be acheived using kNN or bootstrapping.
+
+For this purpose, we can use the `ROSE` package to help with balancing the data set. We have a choice of oversampling, undersampling, both or synthethically generating new data. We will mostly go with oversampling, i.e. sampling up, since we have rather few cases of `recurrence-events` to begin with. We will also attempt variants of other sampling techniques, so that we can compare results. Some of those we will try include undersampling and synthethic data generation. As we proceed with building the model, we will evaluate the results from these methods and examine how well they do. Using both oversampling and undersampling is not uncommon. This method attempts to strike a balance between undersampling the majority class and oversampling the minority class. Synthethic data generation, on the other hand, could result in overfitting following its more robust algorithm and exceptionally high accuracy. Before applying sampling techniques, we will split the data set into training and test sets, and then randomly sample the training set. We will then test our model with the test set to assess its viability.
+
+In order to be balanced in the train-test split, we will subset the data set and split in the desired 70/30 ratio.
+
+```{r}
+###################
+# Class Balancing #
+###################
+
+
+#Load required library
+library(dplyr)
+
+#Set seed value
+set.seed(80)
+
+#Split data set into training and test sets
+bdata_non_recur <- subset(bdata, class == "no-recurrence-events")
+bdata_recur <- subset(bdata, class == "recurrence-events")
+
+#Sample equally from recurrence and non-recurrence events. Split into training and test data
+ind.non.recur <- sample(1:nrow(bdata_non_recur), size = floor(0.7*nrow(bdata_non_recur)))
+ind.recur <- sample(1:nrow(bdata_recur), size = floor(0.7*nrow(bdata_recur)))
+
+bdata.train <- bind_rows(bdata_non_recur[ind.non.recur,], bdata_recur[ind.recur,])
+bdata.test <- bind_rows(bdata_non_recur[-ind.non.recur,], bdata_recur[-ind.recur,])
+
+#Shuffle contents of training and test sets
+train.ind <- sample(1:nrow(bdata.train), size = 1*nrow(bdata.train))
+bdata.train <- bdata.train[train.ind,]
+
+test.ind <- sample(1:nrow(bdata.test), size = 1*nrow(bdata.test))
+bdata.test <- bdata.test[test.ind,]
+```
+
+The training set is still unbalanced, and we can now proceed to randomly sample the training set to achieve balance prior to fitting model.
+
+```{r}
+#Show class samples in training set
+table(bdata.train$class)
+```
+
+```{r}
+#Load required library
+library(ROSE)
+
+#Set seed
+set.seed(80)
+
+#Oversampling and undersampling
+bdata.balanced.ovun <- ovun.sample(class ~ ., data = bdata.train, method = "both", p = 0.5)
+bdata.balanced.ovun <- bdata.balanced.ovun$data
+
+#Examine distribution
+table(bdata.balanced.ovun$class)
+
+#Synthethic data generation
+bdata.balanced.rose <- ROSE(class ~ ., data = bdata.train, seed = 100)$data
+
+#Examine distribution of ROSE data set
+table(bdata.balanced.rose$class)
+```
+
+We have now been able to achieve a balanced data set in the training set. We have created two data sets: one generated using both oversampling and undersampling, and the other generated synthetically using Randomly Oversampling Examples (ROSE). These will be used to build all subsequent models, and we will examine how well they both do.
+
+
+## Model Fitting {#model-fitting}
+
+We will be conducting classification tasks using the derived data sets. The research problem seeks to produce a model which should achieve good prediction in distinguishing between recurrent and non-recurrent cases of breast cancer. In achieving a good model, we aim to minimize the number of false negatives. False negatives (FN) are cases where a recurrent case has been wrongly classified as non-recurrent. In clinical practices, this is typically avoided, as it could be extremely traumatic for the patients involved. As a result, while conducting our analysis, we will attempt to minimize FNs.
+
+Our classification tasks is comprised of four model fitting methods. First, we construct a decision tree and evaluate our test set with this. Next, we create a naive-bayes classifier and we see how well this does in comparison using the test set. Then we conduct logistic regression with the available data. Before conducting logistic regression, we will use stepwise regression to determine the best features. Finally, we will conduct classification using a neural network. During each step, cross-validation methods will be used to test the robustness of each classifier against the others. Metrics will also be collected, and as a final step in the process, the results of the different classifiers will be compared.
+
+Our model should seek to minimize the false negatives. As `recurrence-events` will be our positive class, false negatives will represent instances of recurrence-events wrongly classified as no-recurrence-events. This will be cases of patients who run the risk of relapsing, but who are predicted by the model as not disposed to recurrence. This is especially important as we intend avoiding scenarios whereby patients are misinformed. We will also seek to improve sensitivity and precision, while also deriving the appropriate ROC curves. 
+
+```{r fig.align="center"}
+require(jpeg)
+img<-readJPEG("./images/contingency.jpg")
+plot(1:4, ty = 'n', ann = FALSE, xaxt = 'n', yaxt = 'n')
+rasterImage(img,1,1,4,4)
+```
+
+We will be using seed value of 80 to ensure consistency in all results.
+
+
+
+### Decision Tree {#decision-tree}
+
+Using the now balanced data set, we build a decision tree and calculate metrics.
+First we use the oversampled training data set, which has been oversampled with a probability of 0.5.
+
+```{r}
+###################################
+# Model-fitting for Decision Tree #
+###################################
+
+#Set seed
+set.seed(80)
+
+#Load required library
+library(partykit)
+library(caret)
+
+#Oversampling
+bdata.balanced.ov <- ovun.sample(class ~ ., data = bdata.train, method = "over", p = 0.5)
+bdata.balanced.ov <- bdata.balanced.ov$data
+
+#Build decision tree
+bdata.ctree <- ctree(class ~ ., data = bdata.balanced.ov)
+
+#Predict classes using test set
+bdata.pred.ctree <- predict(bdata.ctree, newdata = bdata.test)
+
+#Generate confusion matrix
+confusionMatrix(bdata.pred.ctree, reference = bdata.test$class, positive="recurrence-events")
+```
+
+Next, we use the training set that has been over- and under-sampled.
+
+```{r}
+#Set seed
+set.seed(80)
+
+#Load required library
+library(partykit)
+library(caret)
+
+#Build decision tree
+bdata.ctree <- ctree(class ~ ., data = bdata.balanced.ovun)
+
+#Predict classes using test set
+bdata.pred.ctree <- predict(bdata.ctree, newdata = bdata.test)
+
+#Generate confusion matrix
+confusionMatrix(bdata.pred.ctree, reference = bdata.test$class, positive="recurrence-events")
+
+```
+
+The oversampled set produced the model with the least false negatives. However, as a trade-off we also experienced increased false positives. Its sensitivity is admirably good at 73%, while the specificity is rather low at 44%. Its overall accuracy is about 53%.
+
+The second analysis which used both over- and under-sampling produced a recall (or sensitivity) value of 42% and an accuracy of 70%. The specificity is good at 82%, though its number of false negatives is higher than the previous model. We could re-attempt the modelling with the synthetically generated data and observe if there are any changes.
+
+```{r}
+#Set seed
+set.seed(80)
+
+#Load required library
+library(partykit)
+
+#Build decision tree
+bdata.ctree <- ctree(class ~ ., data = bdata.balanced.rose)
+
+#Predict classes using test set
+bdata.pred.ctree <- predict(bdata.ctree, newdata = bdata.test)
+
+#Generate confusion matrix
+confusionMatrix(bdata.pred.ctree, reference = bdata.test$class, positive="recurrence-events")
+```
+
+The synthetically generated data seemed to have done a little better than the previous two in striking a balance between the positive and negative classes. With an overall accuracy of 67%, it produced only 11 false negatives. Its sensitivity is rather low at 57%, though its specificifity is good enough at 72%. It attempted to classify more `no-recurrence-cases` correctly, while ensuring that the number of `recurrence-events` correctly classified is high.
+
+Overall, the DT model's output seems appreciably good. There are very few false negatives, i.e. number of recurrent events that were falsely predicted as non-recurrent events, especially using the oversampled data. For the scenario we were presented it (imbalanced data set), the decision tree model seems to have produced a fair output. The tree prioritizes `nodeCaps` as the attribute with the highest information again, hence it is the root node. The next most important feature appears to be `degMalig`. Other features did not appear to be as important in decision making. **It turns out the number of infected lymph nodes and the histological grade of the tumor are rather strong determinants of the recurrence of breast cancer in women**. This is consistent with results obtained from cancer researches.
+
+```{r}
+plot(bdata.ctree, type = "simple", gp = gpar(fontsize = 9))
+```
+
+
+Now, for the cross-validation using decision trees, we can use `caret` to achieve this objective. Since `bdata.balanced.rose` appeared to produce the best model earlier, we will use it this time in our cross-validation:
+```{r}
+######################################
+# Cross-Validation for Decision Tree #
+######################################
+
+
+#set seed
+set.seed(80)
+
+#Load required libraries
+library(rpart)
+library(caret)
+
+#Set hyperparameters
+trnControl <- trainControl(method = "cv")
+
+#Construct model
+bdata.ctree.caret <- train(class ~ ., data = bdata.balanced.rose, method = "ctree", trControl = trnControl)
+
+bdata.ctree.caret
+
+```
+
+
+```{r}
+bdata.ctree.caret$resample
+```
+
+```{r}
+bdata.ctree.caret$resample$Accuracy %>% mean
+```
+
+Our cross-validation did quite well, with a mean accuracy of about 69%. The accuracy values show that this model is quite robust in the face of varying test data, and might in fact do very well for most test data. The accuracy values ranged from 50% to 80%
+
+Given the imbalance in the test data set, if we predicted "no-recurrence-events" for every case in the test data, we will still be right about 70% of the time. So, this mean value isn't really an excellent performance for the model. It performs just as well as random guessing. However, the model states quite emphatically that number of infected lymph nodes and the histological grade of the tumor are rather strong determinants of the recurrence of breast cancer in women. We derive this from our decision tree, and can conclude this is one of the better insights the model supplies.
+
+```{r}
+predict(bdata.ctree.caret, newdata = bdata.test) %>% confusionMatrix(reference = bdata.test$class, positive="recurrence-events")
+```
+
+Using the results of the cross-validation, we again get quite good specificity and accuracy, but poor sensitivity. The false negatives have however been minimized quite. We have only 14 cases of false negatives. 
+
+```{r}
+roc.curve(bdata.test$class, predict(bdata.ctree.caret, newdata = bdata.test, type = "prob")[,2])
+```
+
+The area under the curve is 0.661. The plot of the true positive rate (tpr) against the fale positive rate (fpr) shows that we do not have much leeway in the area of minimizing false positives, though it appears that at lower values of fpr we may still be able to achieve tpr close to 0.6.
+
+
+### Naive-Bayes {#naive-bayes}
+
+As a second model, we will construct a naive-bayes classifier with the available training data set. A naive-Bayes classifier is a probabilistic classifier which applies Bayes's theorem while maintaining strong independence of features. This is the naive component in the classifier. It assumes that each of the features are strongly independent from each other, even though this is not always true. Even though this assumption could be extremely "naive" or oversimplified, the algorithm still works fairly well with most data sets. For categorical variables, it is a straightforward multiplication of observed data frequency.
+
+Here, we will train again with each of `bdata.balanced.ov`, `bdata.balanced.ovun` and `bdata.balanced.rose` in order to get an idea of the performance of the classifier. Then we will test with the available test set. In the end, we will compare its metrics to that obtained earlier using decision tree.
+
+We start out first with a 10-fold cross-validation using the training data set. We will use the training control parameters from the previous model, as this doesn't have to change.
+
+```{r}
+###############################
+# Model-fitting (Naive-Bayes) #
+###############################
+
+#set seed
+set.seed(80)
+
+#Create model
+bdata.nb <- train(x = bdata.balanced.ovun[,-1],
+                  y = bdata.balanced.ovun$class,
+                  method = "nb",
+                  trControl = trnControl)
+```
+
+We examine the folds and their respective accuracies:
+```{r}
+bdata.nb$resample
+```
+
+This time, we have accuracies for the folds ranging from 0.55 to 0.89. Now, we make predictions with the available test data.
+
+```{r}
+predict(bdata.nb, newdata = bdata.test) %>% confusionMatrix(reference = bdata.test$class, positive = "recurrence-events")
+```
+
+The accuracy is about 73%, which is higher than random selection. We observe that the specificity is quite high at about 82%. This means the false positives are appreciably low compared to the true negatives. Most of the predictions for "no-recurrence-events" were got right by the model, so this is a positive. However, the sensitivity (or recall) is still rather low at 53%. This means there is a sizeable number of false negatives relative to the number of true positives. Though the false negatives are only 12, the number of true positives at 14 ensures that the sensitivity is low. Though we have an overall low value of sensitivity (or recall), we still achieve our aim somewhat with this model since the number of false negatives is quite low.
+
+We could improve the model sensitivity by using the randomly sampling method available in `caret`, as opposed to conducting the randomly sampling independently. Although this should make no difference, it appears to influence the sensitivity values when repeated. So, we will set a seed value.
+
+```{r}
+##########################################
+# Cross-Validation for Naive-Bayes Model #
+##########################################
+
+#set seed
+set.seed(80)
+
+#Using caret's down sampling
+#Create model
+bdata.nb.caret <- caret::train(x = as.data.frame(bdata.train[,-1]), y=bdata.train$class, method="nb", trControl=trainControl(method="cv", sampling="up"))
+
+#Predict classes and create confusion matrix
+predict(bdata.nb.caret, newdata = bdata.test) %>% confusionMatrix(bdata.test$class, positive = "recurrence-events")
+```
+
+```{r}
+##################
+# Plot ROC Curve #
+##################
+
+roc.curve(bdata.test$class, predict(bdata.nb.caret, newdata = bdata.test, type = "prob")[,2])
+```
+
+
+There isnt't a lot of difference in the model output by sampling up. The model accuracy stayed the same. Overall, it is only a little improvement compared to the previous naive-bayes model earlier generated. Given the nature of the data set, it is a little hard to obtain a very adequate model. One way to improve the result of this model would be to add more data.
+
+In other to improve the sensitivity of the model, we need to take an alternative approach. We take a closer look at our features and realize that some are better contributors to the model accuracy than others. Firstly, we create a combination of all possible two-feature model and then obtain the respective sensitivities for all two features. This could give an idea of which features in the data set could improve our sensitivity. We will be sampling up as we have done in previous analyses.
+
+```{r}
+##############################
+# Check feature combinations #
+##############################
+
+#Set seed
+set.seed(80)
+
+#Create all possible combinations of two features
+comb.mat <- gtools::combinations(9,2,2:10)
+
+#Create copies of training and test sets
+bdata.train.check <- bdata.train
+bdata.test.check <- bdata.test
+
+#Initialize container
+df.sens.spec <- rep(0,36)
+
+#Repeat test by sampling up
+for (i in 1:36){
+  bdata.caret.sens <- caret::train(x = as.data.frame(bdata.train.check[,comb.mat[i,]]), y = bdata.train.check$class, method = "nb", trControl = trainControl(method = "cv", sampling = "up"))
+  df.sens.spec[i] <- sensitivity(predict(bdata.caret.sens, newdata = bdata.test.check), reference = bdata.test$class, positive = "recurrence-events")
+  
+}
+
+df.sens.spec
+```
+
+```{r}
+mat.out <- cbind(df.sens.spec, comb.mat)
+mat.out
+```
+```{r}
+mat.out[which.max(mat.out[,1]), c(2,3)]
+```
+
+
+We see that features 2 and 4 seemed to contribute significantly to the model's sensitivity. These are features `age` and `tumorSize`. This means we could attempt utilizing features 2 and 4 in a new model and see if this fits well with our test data. It should be noted that this step is merely exploratory in nature.
+
+```{r}
+set.seed(80)
+
+caret::train(x = as.data.frame(bdata.train.check[,c(2,4)]), y=bdata.train.check$class, method="nb", trControl=trainControl(method="cv", sampling="down")) %>% 
+  predict(newdata = bdata.test.check) %>% 
+  confusionMatrix(bdata.test.check$class, positive = "recurrence-events")
+```
+
+Using only features 2 and 4, we are able to improve some of the model's parameters. We also minimized false negatives to a very low value at 10. This is exactly our objective, as we are looking to ensure there are very little cases of people with possible recurrence-events who are wrongly categorized as no-recurrence-events. We have been able to achieve this using the naive-Bayes model. The specificy and sensitivity values look okay, while the model accuracy also ranges around 69%. We may be inclined to further investigate this later.
+
+The randomly sampling method chosen appears to have an impact on the model's accuracy. In the naive-bayes analysis so far, we have used "up" sampling, which is a method of oversampling and which enables our fewer `recurrence-events` class to match up to the `no-recurrence-events` class. Now, we check just how the different sampling methods affect the model accuracy. While the accuracy for "rose" method seemed good, the sensitivity obtained using this sampling method wasn't very good.
+
+```{r}
+#########################################
+# Compare different sampling techniques #
+#########################################
+
+#Set seed
+set.seed(80)
+
+#Conduct down sampling
+bdata.nb.down <- caret::train(x = as.data.frame(as.data.frame(bdata.train[,-1])), y=bdata.train$class, method="nb", trControl=trainControl(method="cv", sampling="down"))
+
+#Conduct up sampling
+bdata.nb.up <- caret::train(x = as.data.frame(as.data.frame(bdata.train[,-1])), y=bdata.train$class, method="nb", trControl=trainControl(method="cv", sampling="up"))
+
+#Conduct rose sampling
+bdata.nb.rose <- caret::train(x = as.data.frame(as.data.frame(bdata.train[,-1])), y=bdata.train$class, method="nb", trControl=trainControl(method="cv", sampling="rose"))
+
+#Conduct smote sampling
+bdata.nb.smote <- caret::train(x = as.data.frame(as.data.frame(bdata.train[,-1])), y=bdata.train$class, method="nb", trControl=trainControl(method="cv", sampling="smote"))
+```
+
+
+```{r}
+bdata.models <- list(down = bdata.nb.down,
+                     up = bdata.nb.up,
+                     rose = bdata.nb.rose,
+                     smote = bdata.nb.smote)
+
+resamples(bdata.models) %>% bwplot
+```
+
+The plot above shows just how the different sampling techniques affect model accuracy. Though overall, they all produce an accuracy above 60%, "sampling up" seems to have greater tendency to produce better accuracy values. "Sampling down" is greater disposed to producing lower accuracy models.
+
+In then next section, we consider using logistic regression.
+
+
+### Logistic Regression {#logistic-regression}
+
+Logistic regression is another classification method which predicts a qualitative response variable. It uses a logit transformation to keep the probabilities of occurence of the response between 0 and 1. It is also a linear model. While the response is usually categorical, the predictors could be categorical, numerical or a mix of both. In our data set, we have all categorical variables, and a categorical response. This makes logistic regression quite a useful model in predicting the outcome of the response variable. In addition, it can provide us probability values which give a sense of how likely the response is. Combining this with the result, we can say with the calculated level of certainty how likely it is for breast cancer to recur in a patient.
+
+Before building the regression model, we will first conduct backward elimination on the features in the training data set. This will provide us with an idea of the features which are the most important for our analysis, i.e. the ones which should improve our desired metric.
+
+```{r}
+################################
+# Conduct step-wise regression #
+################################
+
+#Set seed
+set.seed(80)
+
+#Load required library
+library(MASS)
+
+#Conduct backward elimination
+full <- glm(class ~ ., data = bdata, family = "binomial")
+null <- glm(class ~ 1, data = bdata, family="binomial")
+stepF <- stepAIC(full, direction = "backward", trace = TRUE)
+```
+
+After conducting backward elimination, we see that the most significant features appear to be `nodeCaps`, `degMalig` and `irradiat`. 
+
+```{r}
+glm(class ~ nodeCaps + degMalig + irradiat, data = bdata, family = "binomial") %>% summary
+```
+
+When we use these three predictors to build a logistic regression model, we obtain the output above after calling the `summary` function. This suggests that the log of the odds of experiencing breast cancer recurrence increases by 0.95873 when `nodeCaps` is a yes, i.e. if the cancer metastasized into a lymph node. This is after controlling for all other predictors. This result is consistent with findings from cancer research. Additionally, the summary output suggests that the log of the odds of experiencing breast cancer recurrence increases by 1.26722 if the histological grade of the cancer is a 3, after controlling for all other predictors. Similarly, the risk of a recurrence is higher if the patient has been received irradiation as treatment. 
+
+We will first attempt to build the model using only these features, assess the quality of the model, and then reattempt same with all the features. This way we can observe if there are any differences in the constructed models. This time we will use the formula format in the `train` function.
+
+```{r}
+#set seed
+set.seed(80)
+
+#Build logistic regression model from identified features
+bdata.glm.caret <- train(class ~ nodeCaps + degMalig + irradiat, 
+      data = bdata.train, 
+      method = "glm", 
+      family = "binomial", 
+      trControl = trainControl(method = "cv", number = 10, sampling = "up")) 
+
+bdata.glm.caret %>%
+  predict(newdata = bdata.test) %>% confusionMatrix(reference=bdata.test$class, positive="recurrence-events")
+```
+
+The model did only as good as the previous two. The sensitivity is around 50%, while the specificity is about 78%. There are a handful of false negatives, which is misleading for our results. The model accuracy, however, seems comparably better than the naive-bayes. We have used up-sampling available in `caret` to achieve class balance. When the model is retried with `bdata.balanced.ovun`, it yields nearly the same metrics. This is understandable, since the package in use are essentially the same.
+
+Now, we reattempt with all of the features from the training set.
+
+```{r}
+#set seed
+set.seed(80)
+
+#Build logistic regression model from identified features
+train(class ~ ., 
+      data = bdata.train, 
+      method = "glm", 
+      family = "binomial", 
+      trControl = trainControl(method = "cv", number = 10, sampling = "up")) %>%
+  predict(newdata = bdata.test) %>% confusionMatrix(reference=bdata.test$class, positive="recurrence-events")
+```
+
+Using all of the predictors did not seem to change things very much. The sensitivity is still rather low, though the specificity is quite good. This means we were, in fact, better off using only the three predictors from the first model, i.e. `nodeCaps`, `degMalig` and `irradiat`. These features seem to deliver the best metrics for the data set. Alternatively, if we intend to minize the false negatives, we may go with features 2 and 4 as earlier shown. Though they seem to deliver the best sensitivity values, we may still need additional analysis to verify their substance. 
+
+```{r}
+roc.curve(bdata.test$class, predict(bdata.glm.caret, newdata = bdata.test, type = "prob")[,2])
+```
+
+
+### Artificial Neural Networks {#artificial-neural-networks}
+
+Influenced by the biological neuron, neural networks learn by example. They provide learning techniques that are able to interpret even complex data, generalizing to multiple scenarios if required. Artificial neural networks can approximate a lot of function, no matter how complicated. They are modeled after the human brain, which is an interconnected web of neurons transmitting electrical signals around the body. Using this model, neurons, arranged in a series of layers, are designed to receive external information which is run through a series of hidden layers to produce an output. All of the layers, including the input and output units, are all connected, with connections between units represented as weights. Higher weights have more influence; lower weights less influence. Advances in computing power has made neural networks a reality in the modern day, so that millions of calculations which they require can be run on the most basic processors.
+
+The `caret` package allows the use of `nnet` in the creation of a model. We could assess the `nnet` package through this means in our training of a neural network for classification purposes. We set the weight decay and size using the combination specified under `netgrid`.
+
+```{r}
+##################
+# Neural Network #
+##################
+
+#set seed
+set.seed(80)
+
+#Copy training and test data
+bdata.df.nnet.train <- bdata.train
+bdata.df.nnet.test <- bdata.test
+
+#specifiy training parameters
+trControl <- trainControl(method="cv",
+                          number=10,
+                          classProbs = TRUE,
+                          summaryFunction = twoClassSummary,
+                          sampling = "up")
+
+#Define size and decay
+netgrid <- expand.grid(size = seq(1,10,1),
+                       decay = seq(0.1,0.5,0.1))
+
+#Create model
+bdata.nnet <- train(make.names(class) ~., data=bdata.df.nnet.train,method="nnet",
+                    metric="ROC",trControl=trControl,
+                    tuneGrid=netgrid,
+                    verbose=FALSE, trace=FALSE)
+```
+
+```{r}
+print(bdata.nnet)
+```
+
+
+First, we check the metrics of the neural network with the training data set.
+
+```{r}
+predict(bdata.nnet, newdata=bdata.df.nnet.train) %>% confusionMatrix(reference=as.factor(make.names(bdata.df.nnet.train$class)), positive="recurrence.events")
+```
+
+The output appears good. With an accuracy of about 76%, a sensivity of 67% and specificity of nearly 80%, the model appears good on the training data set. This is not surprising however, since the model has seen this data once. Checking with the training set allows us to gain an insight into how the model will report on data it has not seen before by looking at how it does on data it has seen previously.
+
+Now, we check its metrics with the test set.
+
+```{r}
+predict(bdata.nnet, newdata=bdata.df.nnet.test) %>% confusionMatrix(reference=as.factor(make.names(bdata.df.nnet.test$class)), positive="recurrence.events")
+```
+
+The output also seems quite good with the test set. We have an accuracy of 71% which is about the highest we have seen so far. The specificity is a good number at 75%, while the sensitivity is higher than most of what the other models produced. The number of false negatives is also only 10.
+
+We also generate `bdata.nnet.caret` with which we will compare accuracy with other models.
+```{r}
+#set seed
+set.seed(80)
+
+#Create model
+bdata.nnet.caret <- train(class ~ ., 
+      data = bdata.df.nnet.train, 
+      method = "nnet", 
+      trControl = trainControl(method = "cv", number = 10, sampling = "up"), trace = FALSE) 
+```
+
+We can generate a plot of the features important to the classification algorithm.
+```{r}
+#Plot variable importance
+plot(varImp(bdata.nnet))
+```
+
+We can also generate a plot of the neural net.
+```{r, fig.width=12, fig.height=7}
+library(NeuralNetTools)
+
+plotnet(bdata.nnet$finalModel, y_names="class", cex=0.7)
+```
+
+```{r}
+roc.curve(bdata.df.nnet.test$class, predict(bdata.nnet, newdata=bdata.df.nnet.test, type = "prob")[,2])
+```
+
+
+
+
+## Feature Engineering {#feature-engineering}
+
+Having concluded all examinations of all models in this study, we make a few observations:
+
+- the decision tree model did fairly well. We used the `ctree` packaged in building the tree and noted in the results that `degMalig` and `nodeCaps` played in the biggest roles in determining model output.
+
+- the naive-Bayes classifier appeared to deliver the best results for the this data set in terms of accuracy, specificity and sensitivity. The cross-validation output also showed that the model was quite robust
+
+- the logistic regression step identified three features which seem of high importance in this data set: `nodeCaps`, `degMalig` and `irradiat`. The first two confirm the output of the tree model earlier developed. When used these three features produced an output much better than using all the features
+
+- the output from the artificial neural network seemed very good. It appears to be better than those from the logistic regression model and the decision tree model. It also highlighted certain dummy variables of importance in the model fitting, and this now forms the subject of the feature engineering task we will be conducting.
+
+
+We intend to investigate just how good the identified features may be in fitting any model. These are dummy features and are only a subset of the main features. However, we will be checking how well using these features may help with any model whatsoever. First we shuffle the indices in `bdata` which was originally created from stacks of input data.
+
+```{r}
+#set seed
+set.seed(80)
+
+#Shuffled main dataframe
+ind.shuf <- sample(1:nrow(bdata), size = 1*nrow(bdata))
+bdata.shuffled <- bdata[ind.shuf,]
+
+nrow(bdata.shuffled) == nrow(bdata)
+```
+
+To conduct a classification task, a neural network will usually require dummy variables. When we look at the plot of  variable importance, we see that the most important variables in the classification task are the dummy variables relating to tumorSize, nodeCaps, breastQuad, etc. We could isolate these features and reattempt our model fitting with only these features, which apparently count mostly towards the classification task. This time, we could fit any model using these new features. We will be constructing a logistic regression model, and then compare its output to that generated earlier using the identified three important features consisting of `nodeCaps`, `degMalig` and `irradiat`.
+
+Next, we create the required trainin and test sets.
+
+```{r}
+#set seed
+set.seed(80)
+
+#Create dummy variables
+dmy <- dummyVars(~ . -class, data=bdata.shuffled)
+dummy_df <- predict(dmy, newdata=bdata.shuffled)
+
+#Create new dataframe
+bdata_sample_df <- data.frame(class=bdata.shuffled$class, dummy_df)
+
+#Convert elements to factors
+bdata_sample_df[,-1] <- lapply(bdata_sample_df[,-1], factor)
+
+#Isolate the important features
+bdata_sample_df_use <- bdata_sample_df[,c("class", "invNodes.9.11", "degMalig.2", "degMalig.3", "nodeCaps.yes", "tumorSize.30.34", "age.40.49")]
+
+#Create new training and test sets
+ind.new <- createDataPartition(y = bdata_sample_df_use$class, p = 0.7, list = FALSE)
+
+bdata_sample_df_use_train <- bdata_sample_df_use[ind.new,]
+bdata_sample_df_use_test <- bdata_sample_df_use[-ind.new,]
+```
+
+
+We create the model in the next chunk.
+
+```{r}
+###################################
+# Create Logistic Regression Model#
+# with dummy features             #
+###################################
+
+#set seed
+set.seed(80)
+
+#Build logistic regression model from identified features
+bdata.glm.dmy.caret <- train(class ~ ., 
+      data = bdata_sample_df_use_train, 
+      method = "glm", 
+      family="binomial",
+      trControl = trainControl(method = "cv", number = 10, sampling = "up")) 
+
+bdata.glm.dmy.caret %>%
+  predict(newdata = bdata_sample_df_use_test) %>% confusionMatrix(reference=bdata_sample_df_use_test$class, positive="recurrence-events")
+```
+
+```{r}
+roc.curve(bdata_sample_df_use_test$class, predict(bdata.glm.dmy.caret, newdata = bdata_sample_df_use_test, type="prob")[,2])
+```
+
+This new model does quite good on the test data. It yield an overall accuracy of 65.88%, a sensitivity of 56% and a specificity of 70%, while producing only 11 false negatives. This is the smallest number of false negatives so far.
+
+Now, we can compare the model output of this logisitic regression result with that generated earlier to see if there is any significant difference between both.
+
+```{r}
+bdata.glm.caret$resample %>% data.frame %>% head
+```
+
+```{r}
+bdata.glm.dmy.caret$resample %>% data.frame %>% head
+```
+
+
+First we check if both are accuracy values are normally distributed
+```{r}
+par(mfrow=c(1,2))
+
+hist(bdata.glm.caret$resample$Accuracy, breaks=5, main = "Main Features", xlab = "Accuracy")
+hist(bdata.glm.dmy.caret$resample$Accuracy, breaks=5, main = "Dummy Features", xlab = "Accuracy")
+```
+
+The histograms appear normally distributed. However, we could still check using `shapiro.test`.
+```{r}
+bdata.glm.caret$resample$Accuracy %>% shapiro.test
+```
+
+
+```{r}
+bdata.glm.dmy.caret$resample$Accuracy %>% shapiro.test
+```
+
+The null for this test is that the data is normally distributed. With `p-value` greater than $\alpha=0.05$, we can conclude that the two are normally distributed. Now, we do a t-test to check if there is any significant difference between both samples.
+
+```{r}
+t.test(bdata.glm.caret$resample$Accuracy, bdata.glm.dmy.caret$resample$Accuracy)
+```
+
+It appears there is no significant difference between the cross-validation results of both models. Even though the one derived from the dummy variables produced fewer false negatives than the original logistic regression model, it does not appear significantly different from the original.
+
+In our bid to improve the accuracy of this model, we consider other possible feture engineering tasks. Additional feature engineering tasks we could conduct include feature crossing between some of the features. The features `breast` and `breastQuad` refer to the same feature in some sense, only they are location dependent. We consider combining this two features into a group of dummy variables and then creating new models with this.
+
+```{r}
+#set seed
+set.seed(80)
+
+
+#Combine breast and breastQuad in a feature cross
+dmy2 <- dummyVars(~ breast:breastQuad, data = bdata.shuffled)
+dummy_df2 <- predict(dmy2, newdata = bdata.shuffled)
+
+#Combine into new dataframe
+bdata_sample_feature_cross <- data.frame(bdata.shuffled[,-c(8,9)], dummy_df2)
+
+# #Convert to factors
+bdata_sample_feature_cross[,-1] <- lapply(bdata_sample_feature_cross[,-1], factor)
+
+#Check structure
+str(bdata_sample_feature_cross)
+```
+
+```{r}
+#Create training and test data
+
+bdata_sample_feature_cross_train <- bdata_sample_feature_cross[ind.new,]
+bdata_sample_feature_cross_test <- bdata_sample_feature_cross[-ind.new,]
+```
+
+When we attempt a logistic regression or naive-Bayes model with the output data frame, we do not get consistent results. It appears there is perfect separation for some of the data points, because of the many 0's and 1's present in the dummy variables created. However, a decision tree model works quite fine, even though dummy variables are not particularly suited as input for decision tree models. Decision tree models work best with categorical variables in thier original form.
+
+```{r}
+###################################
+# Create Decision Tree Model      #
+# with crossed features           #
+###################################
+
+#set seed
+set.seed(80)
+
+#Build logistic regression model from identified features
+bdata.ctree.dmy.caret <- train(class ~ ., 
+      data = bdata_sample_feature_cross_train, 
+      method = "ctree",
+      trControl = trainControl(method = "cv", number = 10, sampling = "up")) 
+
+bdata.ctree.dmy.caret %>%
+  predict(newdata = bdata_sample_feature_cross_test) %>% confusionMatrix(reference=bdata_sample_feature_cross_test$class, positive="recurrence-events")
+```
+
+The result is not particularly inspiring. It is close to some of what we obtained earlier. Clearly dummifying these two variables doesn't appear to provide additional insight.
+
+
+
+## Results {#results}
+
+Our initial assessment of the data set showed that it was highly imbalanced. We needed to treat this imbalance appropriately and used `ROSE` for this operation. We created an oversampled data set, and another data set which combined both oversampling and undersampling. Going into the analyses, we observed that we would use oversampling more, since a part of the class, the `recurrence-events` class, was already small enough. In using oversampling and undersampling techniques in modeling building, we also leveraged the availability of a sampling option while training using the `caret` package.
+
+We proceeded to build four separate models so that we can compare their performances on the breast cancer data set. In qualifying a model, we look at the one which minimizes the false negatives. The decision tree model used first the oversampled data set and then the doubly-sampled data set. We used a seed value of 80 throughout this analysis. The oversampled data set produced a sensitivity of 73% and a specificity of 44%, while delivery an accuracy of 52%. There were only 7 false negatives in all. The doubly-sampled data set, on the other hand, produced 15 false negatives. It delivered a specificity of 82% and a sensitivity of 42% with an overall accuracy of 70% on the test set. This seems okay, but without conducting a cross-validation check it is hard to accept the output produced by this model.
+
+Cross-validation was conducted using the `caret` package and the output seemed promising. With only 11 false negatives and a specificity of 72%, the model seemed quite robust. Its overall accuracy was 67%, which is no better than random selection. Random selection on the imbalanced test set will produce an accuracy of 70%. Its sensitivity was also rather low at a value of 46%. While we can say that the model has not done excellently, we can comfortably settle on the fact that the model definitively indicated that the number of infected lymph nodes and the histological grade of the tumor are rather strong determinants in the recurrence of breast cancer in women. These are the two top features identified by the tree model. This conclusion is consistent with results obtainable from cancer research.
+
+The naive-Bayes classifier constructed using the training data set also appeared quite good. It delivered a specificity of 82% on the test set and a sensitivity of 54%, while maintaining only 12 false negatives. Its overall accuracy was 74% which is much better than random selection. Again we sampled up using the functionality provided by the `caret` package. The output of this model was only a little better than the previous model. It delivered better specificity and sensitivity, and better overall accuracy even though it has one more false negative than the decision tree model.
+
+To obtain richer insight and more as an exploratory procedure, we combined every two possible features of the data set in order to check which delivered the best metrics. We were able to identify `age` and `tumorSize` as two features which delivered well on certain metrics as it relates to the data set. When these two were used to develop a naive-Bayes model, we were able to achieve an accuracy of 69% while maintaining 10 false negatives.
+
+Additional checks confirmed that the models were quite sensitive to the sampling techniques used. As a result, further examination was conducted to compare results from all these sampling methods including oversampling, undersampling, ROSE and SMOTE. We found that, for this data set, sampling up seemed to have a greater tendency to produce better accuracy values. Sampling down, on the other hand, was greater disposed to producing lower accuracy models.
+
+Another classification considered was logistic regression. Prior to fitting a model, we conducted step-wise regression to identify which could be the most interesting features for analysis, or the features which should produce the best metric. We identified this as `nodeCaps`, `degMalig` and `irradiat`. We built the model first using these three features, and then a second model using all the features. The first model produced an accuracy of 69% on the test set, a sensitivity of 50% and a specificity of 77%. The false negatives were only 13. The cross-validation results also seemed good. This model appeared to perform better than the model with all the features included. The full model did slightly less than the former model yielding 14 false negatives, a sensitivity of 46%, a specificity of 75% and an overall accuracy of 67% on the test set. Both models, however, did not do as well as the naive-Bayes model, for example. 
+
+The final model developed trained a neural network for classification purposes. We used the `nnet` package available through the `caret` package. Neural networks are highly dependent on initial variables, so we set the seed to 80 to conform with our earlier steps. We created a grid of decay and size as hyperparameters with which to tune the model. In the end, the model used size of 1 and decay of 0.5. Unexpectedly, the neural network did considerably well on the training set producing an accuracy of 76%. However, it did quite better than some of the other models on the test set. We recorded 13 false negatives, an accuracy of 71%, a specificity of 80% and a sensitivity of 50%. Prior to passing the features into the neural network, the features were preprocessed into dummy variables through one-hot encoding. The variable importance plot showed some of the dummy features that were important in the training of the model. This feature importance plot suggested additional ideas of feature engineering that may be used to improve any model.
+
+Featuring engineering often provides additional opportunity to explore redundant variables. Sometimes, the effort yields positive results. In our case, we conducted used one-hot encoding to explore additional features suggested as important by the neural network results. These features topped the list of variable importance in the plot of the dummy variables fed into the neural network. Using these features with a logistic regression model, we were able to obtain another model slightly better than that earlier derived from the purely categorical features. However, a t-test showed that this result was not statistically significant than the earlier result. Additional exploration of dummy variables in the data set derived from one-hot encoding, including attempts at feature crossing, did not produce further interesting results.
+
+We will now compare the cross-validation output of the different models to see if any is significant different from the rest, while also examining their ROC curves
+
+```{r}
+#ROC curve for decision tree
+roc.curve(bdata.test$class, predict(bdata.ctree.caret, newdata = bdata.test, type = "prob")[,2], col="blue", lwd=2)
+
+#ROC curve for naive-Bayes
+roc.curve(bdata.test$class, predict(bdata.nb.caret, newdata = bdata.test, type = "prob")[,2], add=TRUE, col="black", lwd=2)
+
+#ROC curve for logistic regression
+roc.curve(bdata.test$class, predict(bdata.glm.caret, newdata = bdata.test, type = "prob")[,2], add=TRUE, col="red", lwd=2)
+
+#ROC curve for neural network
+roc.curve(bdata.df.nnet.test$class, predict(bdata.nnet, newdata=bdata.df.nnet.test, type = "prob")[,2], add=TRUE, col="darkgreen", lwd=2)
+
+legend("bottomright", c("Decision Tree: AUC=0.661", "Naive-Bayes: AUC=0.720", "Logistic Regression: AUC=0.651", "Neural Network: AUC=0.656"),lty=c(1,1,1,1), col=c("blue", "black", "red", "darkgreen"))
+```
+
+
+It appears the accuracy for the naive-Bayes model is highest, but we would need to conduct a statistical check to be certain. We are going to check the respective distributions to see if any is significantly different from the rest. However, we check first if they are normally distributed using `shapiro.test`.
+```{r}
+#Decision Tree
+bdata.ctree.caret$resample$Accuracy %>% shapiro.test
+```
+
+```{r}
+#Naive-Bayes
+bdata.nb.caret$resample$Accuracy %>% shapiro.test
+```
+
+```{r}
+#Logistic Regression
+bdata.glm.caret$resample$Accuracy %>% shapiro.test
+```
+
+```{r}
+#Neural Network
+bdata.nnet.caret$resample$Accuracy %>% shapiro.test
+```
+
+
+The null is that the distribution is normal. The p-values for each test are all greater than 0.05, therefore we fail to reject the null hypothesis that the distributions are all normal. This means we can use an ANOVA test to check if the means are different, since the tests are all conducted independently.
+
+```{r}
+#Collect all into a dataframe
+accuracy_df <- data.frame(DT = bdata.ctree.caret$resample$Accuracy, NB = bdata.nb.caret$resample$Accuracy, LG = bdata.glm.caret$resample$Accuracy, NN = bdata.nnet.caret$resample$Accuracy)
+
+head(accuracy_df)
+```
+
+```{r}
+accuracy_df %>% gather(key=key, value=value) %>% aov(value ~ key, data = .) %>% summary
+```
+
+
+We get a `p-value` of 0.934 suggesting that the group of data are not that different in mean values. They are mostly same in their outputs. Though it may appear that the naive-Bayes model delivered the greatest accuracy and AUC, its output doesn't appear that different from the other three models.
+
+
+
+## Conclusion and Recommendations {#conclusion}
+
+We examined the breast cancer data set provided at UCI's machine learning repository. This data set consists of 286 records of patients who either suffered or did not suffer a recurrence of breast cancer. It contained 10 records, 9 of which are the predictors and 1 class or label variable. The predictors include features such as `age`, `menopause`, `tumorSize`, `invNodes`, `nodeCaps`, `degMalig`, `breast`, `breastQuad` and `irradiat`, all of which characterize breast cancer patients. 
+
+After conducting an exploratory analysis on the data set, identifying and imputing missing values, we proceeded to create models to predict the class label, i.e. establish using the features patients who are likely to suffer or not suffer a recurrence of breast cancer. Four different classification models were used in the analysis: decision tree, naive-Bayes, logistic regression and neural network. Though the results of the decision tree model were not particularly excellent, we were able establish some of the highest risk factors leading to recurrence: the number of infected lymph nodes and the histological grade of the tumor. This conclusion is consistent with findings from cancer research. The naive-Bayes model probably provided the best output, with low false negatives, high accuracy and high specificity. Since we are seeking to minimize false negatives, this was an encouraging result. The output of the logistic regression was also good. The step-wise regression conducted prior to fitting the model identified the same variables earlier spotted by the decision tree model. Fitting the logistic regression model with only these three variables produced better output than fitting with all the features. Finally, the neural network we trained probablyp produced the second best output. The accuracy was high on both the training and the test sets. Though the models all produced varying values of accuracy, checking if they differ using `ANOVA` revealed that their outputs were not too different from each other. Here, we failed to reject the null.
+
+Though there are some significantly good results achieved with the different models, there is little doubt a much better result could have been achieved if we had more data. With more data to fit the models we could remove their heavy susceptibility to the randomness inherent in model fitting while also ensuring more robust output. To minimize the effects of this randomness, we applied cross-validation at each stage. The outputs of the different cross-validation results were consistent with the results obtained with the test data. This showed that the models were robust enough. Another recommendation would be to perhaps have more features available for this kind of data set. More features would help with understanding the different records better and would in fact lead to better model outputs.
+
+
+
+
+## References {#references}
+
+[1] Alva N. (2018). Using machine learning techniques to predict the recurrence of breast cancer. LinkedIn Learning. Retrieved May 29, 2020, from https://www.linkedin.com/pulse/using-machine-learning-techniques-predict-recurrence-breast-alva
+
+
+[2] American Cancer Society medical and editorial content team. (2020). Lymph Nodes and Cancer. American Cancer Society. Retrieved May 29, 2020, from https://www.cancer.org/cancer/cancer-basics/lymph-nodes-and-cancer.html
+
+[3] Foulkes W. D. (2012). Size Surprise? Tumour size, nodal statusm and outcome after breast cancer. Editorial, Current Oncology 19:5. Retrieved May 30, 2020, from https://www.current-oncology.com/index.php/oncology/article/view/1185/1020
+
+[4] Myatt G.J., and Johnson W.P. (2019). Making sense of Data II: A Practical Guide to Data Visualization, Advanced. John Wiley & Sons. Retrieved June 01, 2020.
+
+[5] Djinit.ai. (2020). Neural Networks. Retrieved June 03, 2020, from https://djinit-ai.github.io/2018/02/08/neural-networks.html.
+
+[6] Mayo Clinic (2020). Recurrent Breast Cancer. Retrieved June 19, 2020, from https://www.mayoclinic.org/diseases-conditions/recurrent-breast-cancer/symptoms-causes/syc-20377135
