@@ -15,5 +15,10 @@ Download folder `breast-cancer-data`.
 Open `.rmd` file in RStudio, and run chunks.
 If RStudio unavailable, open `.html` file to assess results of project.
 
+## Folders
+`data` holds the data for the analysis.
+`docs` has the project report and abstract
+`images` hold images used in `.rmd` file.
+
 ## Contributors
-manchuran
+[manchuran](https://github.com/manchuran/).
