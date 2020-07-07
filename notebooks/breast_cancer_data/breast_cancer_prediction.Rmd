@@ -20,7 +20,7 @@ knitr::opts_chunk$set(echo = TRUE)
   - [Decision Tree](#decision-tree)
   - [Naive-Bayes](#naive-bayes)
   - [Logistic Regression](#logistic-regression)
-  - [Artificial Neural Networks](#artificial-neural-networks)
+  - [Neural Networks](#neural-networks)
 - [Feature Engineering](#feature-engineering)
 - [Results](#results)
 - [Conclusion and Recommendations](#conclusion)
@@ -299,7 +299,7 @@ We are able to tell that the distibution of age in the data set appears normal. 
 We also examine the correlation of the average `age` with the average `tumorSize` and average `invNode`. The correlation between these variables is very weak. Perhaps we can generalize with these averages and supposed that the actual factor variables may be independent of each other.
 
 ```{r}
-bdata_malt %>% select(mage, mtumorSize, minvNodes) %>% cor
+bdata_malt %>% dplyr::select(mage, mtumorSize, minvNodes) %>% cor
 ```
 
 
@@ -883,7 +883,7 @@ roc.curve(bdata.test$class, predict(bdata.glm.caret, newdata = bdata.test, type 
 ```
 
 
-### Artificial Neural Networks {#artificial-neural-networks}
+### Neural Networks {#neural-networks}
 
 Influenced by the biological neuron, neural networks learn by example. They provide learning techniques that are able to interpret even complex data, generalizing to multiple scenarios if required. Artificial neural networks can approximate a lot of function, no matter how complicated. They are modeled after the human brain, which is an interconnected web of neurons transmitting electrical signals around the body. Using this model, neurons, arranged in a series of layers, are designed to receive external information which is run through a series of hidden layers to produce an output. All of the layers, including the input and output units, are all connected, with connections between units represented as weights. Higher weights have more influence; lower weights less influence. Advances in computing power has made neural networks a reality in the modern day, so that millions of calculations which they require can be run on the most basic processors.
 
@@ -953,9 +953,9 @@ bdata.nnet.caret <- train(class ~ .,
 ```
 
 We can generate a plot of the features important to the classification algorithm.
-```{r}
+```{r, fig.width=10, fig.height=7}
 #Plot variable importance
-plot(varImp(bdata.nnet))
+plot(varImp(bdata.nnet), scales=list(y = list(cex=0.9)))
 ```
 
 We can also generate a plot of the neural net.
@@ -1169,19 +1169,29 @@ rasterImage(img,1,1,4,4)
 
 We proceeded to build four separate models so that we can compare their performances on the breast cancer data set. In qualifying a model, we look at the one which minimizes the false negatives. The decision tree model used first the doubly-sampled data set and then the synthetically generated data set. We used a seed value of 80 throughout this analysis. Our initial runs of the randomly sampled data sets helped throw light on what the models could produce. But the final training and testing were conducted using the `caret` package and leveraging its functionality to balanced the data set while simultaneously conducting cross-validation.
 
-While building the decision tree classifier, cross-validation was conducted using the `caret` package. The model produced 18 false negatives, a sensitivity of 30% and a specificity of 88%. Its overall accuracy was 71%, which is no better than random selection. Random selection on the imbalanced test set will produce an accuracy of 70%. While we can say that the model has not done excellently, we can comfortably settle on the fact that the model definitively indicated that the number of infected lymph nodes and the histological grade of the tumor are rather strong determinants in the recurrence of breast cancer in women. These are the two top features identified by the tree model. This conclusion is consistent with results obtainable from cancer research.
+While building the decision tree classifier, cross-validation was conducted using the `caret` package. The model produced 18 false negatives, precision value of 53%, a sensitivity of 30% and a specificity of 88%. Its overall accuracy was 71%, which is no better than random selection. Random selection on the imbalanced test set will produce an accuracy of 70%. While we can say that the model has not done excellently, we can comfortably settle on the fact that the model definitively indicated that the number of infected lymph nodes and the histological grade of the tumor are rather strong determinants in the recurrence of breast cancer in women. These are the two top features identified by the tree model. This conclusion is consistent with results obtainable from cancer research.
 
-The naive-Bayes classifier constructed using the training data set also appeared quite good. It delivered a specificity of 82% on the test set and a sensitivity of 54%, while maintaining only 12 false negatives. Its overall accuracy was 74% which is much better than random selection. Again we sampled up using the functionality provided by the `caret` package. The output of this model was only a little better than the previous model. It delivered better specificity and sensitivity, and better overall accuracy even though it has one more false negative than the decision tree model.
+The naive-Bayes classifier constructed using the training data set also appeared quite good. It delivered a specificity of 82% on the test set, a precision score of 56%,  and a sensitivity of 54%, while maintaining only 12 false negatives. Its overall accuracy was 74% which is much better than random selection. Again we sampled up using the functionality provided by the `caret` package. The output of this model was only a little better than the previous model. It delivered better specificity and sensitivity, and better overall accuracy even though it has one more false negative than the decision tree model.
 
 To obtain richer insight and more as an exploratory procedure, we combined every two possible features of the data set in order to check which delivered the best metrics using the naive-Bayes classifier. We were able to identify `age` and `tumorSize` as two features which delivered well on certain metrics as it relates to the data set. When these two were used to develop a naive-Bayes model, we were able to achieve an accuracy of 69% while maintaining a lower number of 10 false negatives.
 
 Additional checks confirmed that the models were quite sensitive to the sampling techniques used. As a result, further examination was conducted to compare results from all these sampling methods including oversampling, undersampling, ROSE and SMOTE. We found that, for this data set, sampling up seemed to have a greater tendency to produce better accuracy values. Sampling down, on the other hand, was greater disposed to producing lower accuracy models.
 
-Another classification considered was logistic regression. Prior to fitting a model, we conducted stepwise regression to identify which could be the most interesting features for analysis, or the features which should produce the best metric. We identified this as `nodeCaps`, `degMalig` and `irradiat`. We built the model first using these three features, and then a second model using all the features. The first model produced an accuracy of 69% on the test set, a sensitivity of 50% and a specificity of 77%. The false negatives were only 13. The cross-validation results also seemed good. This model appeared to perform better than the model with all the features included. The full model did slightly less than the former model yielding 14 false negatives, a sensitivity of 46%, a specificity of 75% and an overall accuracy of 67% on the test set. Both models, however, did not do as well as the naive-Bayes model, for example. 
+Another classification considered was logistic regression. Prior to fitting a model, we conducted stepwise regression to identify which could be the most interesting features for analysis, or the features which should produce the best metric. We identified this as `nodeCaps`, `degMalig` and `irradiat`. We built the model first using these three features, and then a second model using all the features. The first model produced an accuracy of 69% on the test set, a sensitivity of 50%, a precision score of 48%, and a specificity of 77%. The false negatives were only 13. The cross-validation results also seemed good. This model appeared to perform better than the model with all the features included. The full model did slightly less than the former model yielding 14 false negatives, a sensitivity of 46%, a specificity of 75% and an overall accuracy of 67% on the test set. Both models, however, did not do as well as the naive-Bayes model, for example. 
 
-The final model developed trained a neural network for classification purposes. We used the `nnet` package available through the `caret` package. Neural networks are highly dependent on initial variables, so we set the seed to 80 to conform with our earlier steps. We created a grid of decay and size as hyperparameters with which to tune the model. In the end, the model used size of 1 and decay of 0.5. We found that increasing the number of hidden layers did not improve model results. Unexpectedly, the neural network did considerably well on the training set producing an accuracy of 76%. However, it did quite better than some of the other models on the test set. We recorded 13 false negatives, an accuracy of 71%, a specificity of 80% and a sensitivity of 50%. Prior to passing the features into the neural network, the features were preprocessed into dummy variables through one-hot encoding. The variable importance plot showed some of the dummy features that were important in the training of the model. This feature importance plot suggested additional ideas of feature engineering that may be used to improve any of our earlier models.
+The final model developed trained a neural network for classification purposes. We used the `nnet` package available through the `caret` package. Neural networks are highly dependent on initial variables, so we set the seed to 80 to conform with our earlier steps. We created a grid of decay and size as hyperparameters with which to tune the model. In the end, the model used size of 1 and decay of 0.5. We found that increasing the number of hidden layers did not improve model results. Unexpectedly, the neural network did considerably well on the training set producing an accuracy of 76%. However, it did quite better than some of the other models on the test set. We recorded 13 false negatives, an accuracy of 71%, a specificity of 80%, precision score of 52%, and a sensitivity of 50%. Prior to passing the features into the neural network, the features were preprocessed into dummy variables through one-hot encoding. The variable importance plot showed some of the dummy features that were important in the training of the model. This feature importance plot suggested additional ideas of feature engineering that may be used to improve any of our earlier models.
 
 Featuring engineering often provides additional opportunity to explore redundant or dominant variables. Sometimes, the effort yields positive results. In our case, we used one-hot encoding to explore additional features suggested as important by the neural network results. These features topped the list of variable importance in the plot of the dummy variables fed into the neural network. Using these features with a logistic regression model, we were able to obtain another model slightly better in its number of false negatives than that earlier derived from the purely categorical features. The earlier model, however, seems better in terms of other metrics. We conducted a t-test to check how statistically different the outputs of these two models were, and failed to reject the null hypothesis. Additional exploration of dummy variables in the data set derived from one-hot encoding, including attempts at feature crossing, did not produce further interesting results.
+
+The F1 score combines the precision and recall values. By using a harmonic mean, it reduces focus on higher values of precision or recall, penalizing the score if any of these two is significantly lower. Among our models, the naïve-Bayes approach recorded the highest F1-score of close to 55%, while the decision tree model produced the lowest F1 score despite having the highest sensitivity value.
+
+```{r fig.align="center"}
+require(jpeg)
+img<-readJPEG("./images/f1score.jpg")
+plot(1:4, ty = 'n', ann = FALSE, xaxt = 'n', yaxt = 'n')
+rasterImage(img,1,1,4,4)
+```
+
 
 We will now compare the cross-validation output of the different models to see if any is significant different from the rest, while also examining their ROC curves
 
