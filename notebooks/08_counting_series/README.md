@@ -11,6 +11,6 @@ This mean, if we write the series "1234567891011121314151617181920212223" as a s
 8
 ``` 
 
-I work through a solution attempt [here](http://nbviewer.ipython.org/urls/raw.github.com/CamDavidsonPilon/Probabilistic-Programming-and-Bayesian-Methods-for-Hackers/master/Chapter2_MorePyMC/Ch2_MorePyMC_PyMC2.ipynb)
+I work through a solution attempt [here](https://nbviewer.jupyter.org/github/manchuran/showables/blob/master/notebooks/08_counting_series/counting_series.ipynb)
 
-### [Read it online here](http://nbviewer.ipython.org/urls/raw.github.com/CamDavidsonPilon/Probabilistic-Programming-and-Bayesian-Methods-for-Hackers/master/Chapter2_MorePyMC/Ch2_MorePyMC_PyMC2.ipynb)
+### [Read it online here](https://nbviewer.jupyter.org/github/manchuran/showables/blob/master/notebooks/08_counting_series/counting_series.ipynb)
