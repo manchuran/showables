@@ -1,4 +1,4 @@
 Finding Patterns in User Quotes
 =================================
 
-### [Read it online here](http://nbviewer.ipython.org/urls/raw.github.com/CamDavidsonPilon/Probabilistic-Programming-and-Bayesian-Methods-for-Hackers/master/Chapter2_MorePyMC/Ch2_MorePyMC_PyMC2.ipynb)
+### [Read it online here](https://nbviewer.jupyter.org/github/manchuran/showables/blob/master/notebooks/07_finding_patterns_in_user_quotes/spectral_partitioning.ipynb)
